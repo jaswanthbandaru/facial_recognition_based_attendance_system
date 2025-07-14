@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Live Attendance - Face Recognition System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>Live Attendance Session</h2>
+        <p>Start the camera and begin attendance tracking. Students will be automatically recognized and attendance will be marked.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="video-container">
+            <img id="video-stream" class="video-stream" src="" alt="Camera feed will appear here" style="display: none;">
+            <div id="video-placeholder" class="video-stream d-flex align-items-center justify-content-center" style="height: 400px; background-color: #f8f9fa;">
+                <div class="text-center">
+                    <h4>Camera Not Started</h4>
+                    <p>Click "Start Camera" to begin</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-buttons">
+            <button id="start-camera" class="btn btn-primary">Start Camera</button>
+            <button id="stop-camera" class="btn btn-secondary" disabled>Stop Camera</button>
+            <button id="start-attendance" class="btn btn-success" disabled>Start Attendance</button>
+            <button id="stop-attendance" class="btn btn-warning" disabled>Stop Attendance</button>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Session Status</h5>
+            </div>
+            <div class="card-body">
+                <div id="status-display">
+                    <div class="status-indicator status-info">
+                        <span id="camera-status">Camera: Stopped</span>
+                    </div>
+                    <div class="status-indicator status-info">
+                        <span id="attendance-status">Attendance: Inactive</span>
+                    </div>
+                    <div class="status-indicator status-info">
+                        <span id="students-count">Students Registered: Loading...</span>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <h6>Instructions:</h6>
+                    <ol>
+                        <li>Click "Start Camera" to begin video feed</li>
+                        <li>Click "Start Attendance" to begin face recognition</li>
+                        <li>Position faces clearly in front of the camera</li>
+                        <li>Attendance will be marked automatically</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5>Recent Activity</h5>
+            </div>
+            <div class="card-body">
+                <div id="activity-log" style="height: 200px; overflow-y: auto;">
+                    <p class="text-muted">No recent activity</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const videoStream = document.getElementById('video-stream');
+    const videoPlaceholder = document.getElementById('video-placeholder');
+    const startCameraBtn = document.getElementById('start-camera');
+    const stopCameraBtn = document.getElementById('stop-camera');
+    const startAttendanceBtn = document.getElementById('start-attendance');
+    const stopAttendanceBtn = document.getElementById('stop-attendance');
+    const cameraStatus = document.getElementById('camera-status');
+    const attendanceStatus = document.getElementById('attendance-status');
+    const studentsCount = document.getElementById('students-count');
+    const activityLog = document.getElementById('activity-log');
+    
+    let statusInterval;
+    
+    // Start camera
+    startCameraBtn.addEventListener('click', function() {
+        fetch('/start_camera')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    videoStream.src = '/video_feed';
+                    videoStream.style.display = 'block';
+                    videoPlaceholder.style.display = 'none';
+                    startCameraBtn.disabled = true;
+                    stopCameraBtn.disabled = false;
+                    startAttendanceBtn.disabled = false;
+                    addActivity('Camera started successfully');
+                } else {
+                    addActivity('Error starting camera: ' + data.message);
+                }
+            });
+    });
+    
+    // Stop camera
+    stopCameraBtn.addEventListener('click', function() {
+        fetch('/stop_camera')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    videoStream.style.display = 'none';
+                    videoPlaceholder.style.display = 'flex';
+                    startCameraBtn.disabled = false;
+                    stopCameraBtn.disabled = true;
+                    startAttendanceBtn.disabled = true;
+                    stopAttendanceBtn.disabled = true;
+                    addActivity('Camera stopped');
+                }
+            });
+    });
+    
+    // Start attendance
+    startAttendanceBtn.addEventListener('click', function() {
+        fetch('/start_attendance')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    startAttendanceBtn.disabled = true;
+                    stopAttendanceBtn.disabled = false;
+                    addActivity('Attendance tracking started');
+                }
+            });
+    });
+    
+    // Stop attendance
+    stopAttendanceBtn.addEventListener('click', function() {
+        fetch('/stop_attendance')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    startAttendanceBtn.disabled = false;
+                    stopAttendanceBtn.disabled = true;
+                    addActivity('Attendance tracking stopped');
+                }
+            });
+    });
+    
+    // Update status
+    function updateStatus() {
+        fetch('/attendance_status')
+            .then(response => response.json())
+            .then(data => {
+                cameraStatus.textContent = 'Camera: ' + (data.camera_running ? 'Running' : 'Stopped');
+                attendanceStatus.textContent = 'Attendance: ' + (data.attendance_active ? 'Active' : 'Inactive');
+                studentsCount.textContent = 'Students Registered: ' + data.students_registered;
+                
+                // Update status indicator colors
+                const cameraIndicator = cameraStatus.closest('.status-indicator');
+                const attendanceIndicator = attendanceStatus.closest('.status-indicator');
+                
+                cameraIndicator.className = 'status-indicator ' + (data.camera_running ? 'status-success' : 'status-info');
+                attendanceIndicator.className = 'status-indicator ' + (data.attendance_active ? 'status-success' : 'status-info');
+            });
+    }
+    
+    // Add activity to log
+    function addActivity(message) {
+        const timestamp = new Date().toLocaleTimeString();
+        const activityItem = document.createElement('div');
+        activityItem.innerHTML = `<small class="text-muted">${timestamp}</small><br>${message}`;
+        activityItem.className = 'mb-2';
+        activityLog.insertBefore(activityItem, activityLog.firstChild);
+        
+        // Keep only last 10 activities
+        while (activityLog.children.length > 10) {
+            activityLog.removeChild(activityLog.lastChild);
+        }
+    }
+    
+    // Start status updates
+    updateStatus();
+    statusInterval = setInterval(updateStatus, 2000);
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', function() {
+        clearInterval(statusInterval);
+    });
+});
+</script>
+{% endblock %}
